@@ -9,7 +9,7 @@ import {
   isGreaterOrEqual,
   isValidNumber,
 } from "@/utils/bn";
-import { useAppContext } from "@/src/context/AppWrapper";
+import { useNetwork } from "@/src/context/Network";
 import { useTxToast } from "@/src/hooks/useTxToast";
 import { useAppConstants } from "@/src/context/AppConstants";
 import { useTokenSymbol } from "@/src/hooks/useTokenSymbol";
@@ -24,7 +24,7 @@ export const useVote = ({ coverKey, value, incidentDate }) => {
   const [voting, setVoting] = useState(false);
 
   const { account, library } = useWeb3React();
-  const { networkId } = useAppContext();
+  const { networkId } = useNetwork();
   const { NPMTokenAddress } = useAppConstants();
   const tokenSymbol = useTokenSymbol(NPMTokenAddress);
   const txToast = useTxToast();
@@ -33,9 +33,14 @@ export const useVote = ({ coverKey, value, incidentDate }) => {
   const {
     allowance,
     approve,
+    loading: loadingAllowance,
     refetch: updateAllowance,
   } = useERC20Allowance(NPMTokenAddress);
-  const { balance, refetch: updateBalance } = useERC20Balance(NPMTokenAddress);
+  const {
+    balance,
+    loading: loadingBalance,
+    refetch: updateBalance,
+  } = useERC20Balance(NPMTokenAddress);
   const { notifyError } = useErrorNotifier();
 
   useEffect(() => {
@@ -44,28 +49,53 @@ export const useVote = ({ coverKey, value, incidentDate }) => {
 
   const handleApprove = async () => {
     setApproving(true);
-    try {
-      const tx = await approve(
-        governanceAddress,
-        convertToUnits(value).toString()
-      );
-
-      await txToast.push(tx, {
-        pending: `Approving ${tokenSymbol} tokens`,
-        success: `Approved ${tokenSymbol} tokens Successfully`,
-        failure: `Could not approve ${tokenSymbol} tokens`,
-      });
-
-      updateAllowance(governanceAddress);
-    } catch (err) {
-      notifyError(err, `approve ${tokenSymbol} tokens`);
-    } finally {
+    const cleanup = () => {
       setApproving(false);
-    }
+    };
+    const handleError = (err) => {
+      notifyError(err, `approve ${tokenSymbol} tokens`);
+    };
+
+    const onTransactionResult = async (tx) => {
+      try {
+        await txToast.push(tx, {
+          pending: `Approving ${tokenSymbol} tokens`,
+          success: `Approved ${tokenSymbol} tokens Successfully`,
+          failure: `Could not approve ${tokenSymbol} tokens`,
+        });
+        cleanup();
+      } catch (err) {
+        handleError(err);
+        cleanup();
+      }
+    };
+
+    const onRetryCancel = () => {
+      cleanup();
+    };
+
+    const onError = (err) => {
+      handleError(err);
+      cleanup();
+    };
+
+    approve(governanceAddress, convertToUnits(value).toString(), {
+      onTransactionResult,
+      onRetryCancel,
+      onError,
+    });
   };
 
-  const handleAttest = async () => {
+  const handleAttest = async (onTxSuccess) => {
     setVoting(true);
+    const cleanup = () => {
+      updateBalance();
+      updateAllowance(governanceAddress);
+      setVoting(false);
+    };
+    const handleError = (err) => {
+      notifyError(err, "attest");
+    };
 
     try {
       const signerOrProvider = getProviderOrSigner(library, account, networkId);
@@ -75,26 +105,55 @@ export const useVote = ({ coverKey, value, incidentDate }) => {
         signerOrProvider
       );
 
-      const args = [coverKey, incidentDate, convertToUnits(value).toString()];
-      const tx = await invoke(instance, "attest", {}, notifyError, args);
+      const onTransactionResult = async (tx) => {
+        await txToast.push(
+          tx,
+          {
+            pending: "Attesting",
+            success: "Attested successfully",
+            failure: "Could not attest",
+          },
+          {
+            onTxSuccess: onTxSuccess,
+          }
+        );
+        cleanup();
+      };
 
-      await txToast.push(tx, {
-        pending: "Attesting",
-        success: "Attested successfully",
-        failure: "Could not attest",
+      const onRetryCancel = () => {
+        cleanup();
+      };
+
+      const onError = (err) => {
+        handleError(err);
+        cleanup();
+      };
+
+      const args = [coverKey, incidentDate, convertToUnits(value).toString()];
+      invoke({
+        instance,
+        methodName: "attest",
+        onTransactionResult,
+        onRetryCancel,
+        onError,
+        args,
       });
-      updateBalance();
-      updateAllowance();
     } catch (err) {
-      notifyError(err, "attest");
-    } finally {
-      setVoting(false);
+      handleError(err);
+      cleanup();
     }
   };
 
   const handleRefute = async () => {
     setVoting(true);
 
+    const cleanup = () => {
+      setVoting(false);
+    };
+    const handleError = (err) => {
+      notifyError(err, "refute");
+    };
+
     try {
       const signerOrProvider = getProviderOrSigner(library, account, networkId);
 
@@ -103,19 +162,36 @@ export const useVote = ({ coverKey, value, incidentDate }) => {
         signerOrProvider
       );
 
-      const args = [coverKey, incidentDate, convertToUnits(value).toString()];
-      const tx = await invoke(instance, "refute", {}, notifyError, args);
+      const onTransactionResult = async (tx) => {
+        await txToast.push(tx, {
+          pending: "Refuting",
+          success: "Refuted successfully",
+          failure: "Could not refute",
+        });
+        cleanup();
+      };
 
-      await txToast.push(tx, {
-        pending: "Refuting",
-        success: "Refuted successfully",
-        failure: "Could not refute",
+      const onRetryCancel = () => {
+        cleanup();
+      };
+
+      const onError = (err) => {
+        handleError(err);
+        cleanup();
+      };
+
+      const args = [coverKey, incidentDate, convertToUnits(value).toString()];
+      invoke({
+        instance,
+        methodName: "refute",
+        onTransactionResult,
+        onRetryCancel,
+        onError,
+        args,
       });
     } catch (err) {
-      // console.error(err);
-      notifyError(err, "refute");
-    } finally {
-      setVoting(false);
+      handleError(err);
+      cleanup();
     }
   };
 
@@ -134,6 +210,9 @@ export const useVote = ({ coverKey, value, incidentDate }) => {
     balance,
     approving,
     voting,
+
+    loadingAllowance,
+    loadingBalance,
 
     canVote,
     isError,
