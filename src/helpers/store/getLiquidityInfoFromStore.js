@@ -1,9 +1,8 @@
 import { utils } from "@neptunemutual/sdk";
 import { getStoredData } from "@/src/helpers/store";
 import { convertToUnits } from "@/utils/bn";
-import BigNumber from "bignumber.js";
 
-export const getRemainingMinStakeToAddLiquidity = async (
+export const getLiquidityInfoFromStore = async (
   networkId,
   coverKey,
   account,
@@ -32,18 +31,16 @@ export const getRemainingMinStakeToAddLiquidity = async (
       },
     },
     {
-      returns: "uint256",
-      property: "remaining",
-      compute: async ({ result }) => {
-        const { minStakeToAddLiquidity, myStake } = result;
-        return BigNumber(minStakeToAddLiquidity).minus(myStake).toString();
-      },
+      key: [utils.keyUtil.PROTOCOL.NS.ACCRUAL_INVOCATION, coverKey],
+      returns: "bool",
+      property: "isAccrualComplete",
     },
   ];
 
   const result = await getStoredData(candidates, networkId, provider);
   return {
-    remaining: result.remaining,
+    minStakeToAddLiquidity: result.minStakeToAddLiquidity,
     myStake: result.myStake,
+    isAccrualComplete: result.isAccrualComplete,
   };
 };

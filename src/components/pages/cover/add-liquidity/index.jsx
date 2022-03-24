@@ -3,7 +3,7 @@ import { useRouter } from "next/router";
 import { useCoverInfo } from "@/src/hooks/useCoverInfo";
 import { AcceptRulesForm } from "@/components/UI/organisms/accept-rules-form";
 import { CoverRules } from "@/components/common/CoverRules";
-import { ProvideLiquidityForm } from "@/components/UI/organisms/cover-form/ProvideLiquidityForm";
+import { ProvideLiquidityForm } from "@/components/LiquidityForms/ProvideLiquidityForm";
 import { CoverActionsFooter } from "@/components/UI/organisms/cover/actions-footer";
 import { Container } from "@/components/UI/atoms/container";
 import { SeeMoreParagraph } from "@/components/UI/molecules/SeeMoreParagraph";
@@ -12,7 +12,7 @@ import { BreadCrumbs } from "@/components/UI/atoms/breadcrumbs";
 import { Hero } from "@/components/UI/molecules/Hero";
 import { getCoverImgSrc, toBytes32 } from "@/src/helpers/cover";
 import { CoverPurchaseResolutionSources } from "@/components/UI/organisms/cover/purchase/resolution-sources";
-import { convertFromUnits, sumOf } from "@/utils/bn";
+import { convertFromUnits } from "@/utils/bn";
 import { useMyLiquidityInfo } from "@/src/hooks/provide-liquidity/useMyLiquidityInfo";
 import { formatCurrency } from "@/utils/formatter/currency";
 
@@ -23,13 +23,13 @@ export const CoverAddLiquidityDetailsPage = () => {
   const { cover_id } = router.query;
   const coverKey = toBytes32(cover_id);
   const { coverInfo } = useCoverInfo(coverKey);
-  const { info, minNpmStake, canAccrue, accrueInterest } = useMyLiquidityInfo({
+  const { info, isWithdrawalWindowOpen, accrueInterest } = useMyLiquidityInfo({
     coverKey,
   });
 
   const imgSrc = getCoverImgSrc(coverInfo);
 
-  const totalLiquidity = sumOf(info.balance, info.extendedBalance);
+  const totalLiquidity = info.vaultStablecoinBalance;
   const reassuranceAmount = info.totalReassurance;
 
   const handleAcceptRules = () => {
@@ -77,11 +77,7 @@ export const CoverAddLiquidityDetailsPage = () => {
 
             {acceptedRules ? (
               <div className="mt-12">
-                <ProvideLiquidityForm
-                  coverKey={coverKey}
-                  info={info}
-                  minNpmStake={minNpmStake}
-                />
+                <ProvideLiquidityForm coverKey={coverKey} info={info} />
               </div>
             ) : (
               <>
@@ -97,7 +93,7 @@ export const CoverAddLiquidityDetailsPage = () => {
           <span className="block col-span-3 row-start-1 md:hidden mb-11">
             <SeeMoreParagraph text={coverInfo.about}></SeeMoreParagraph>
           </span>
-          <div>
+          <div className="col-span-3 row-start-2 md:col-auto md:row-start-auto">
             <CoverPurchaseResolutionSources coverInfo={coverInfo}>
               <hr className="mt-4 mb-6 border-t border-B0C4DB/60" />
               <div
@@ -120,7 +116,7 @@ export const CoverAddLiquidityDetailsPage = () => {
               </div>
             </CoverPurchaseResolutionSources>
             <div className="flex justify-end">
-              {canAccrue && (
+              {isWithdrawalWindowOpen && (
                 <button
                   className="mt-4 mr-2 text-sm text-4e7dd9 hover:underline disabled:hover:no-underline"
                   onClick={accrueInterest}

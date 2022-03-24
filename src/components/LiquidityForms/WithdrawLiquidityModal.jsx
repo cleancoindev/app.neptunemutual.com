@@ -14,23 +14,27 @@ import {
   isGreaterOrEqual,
   isValidNumber,
   isEqualTo,
+  toBN,
 } from "@/utils/bn";
-import { toBytes32 } from "@/src/helpers/cover";
-import { useCalculateLiquidity } from "@/src/hooks/provide-liquidity/useCalculateLiquidity";
-import { formatAmount } from "@/utils/formatter";
-import { useRemoveLiquidity } from "@/src/hooks/provide-liquidity/useRemoveLiquidity";
-import { useTokenSymbol } from "@/src/hooks/useTokenSymbol";
-import { fromNow } from "@/utils/formatter/relative-time";
 import DateLib from "@/lib/date/DateLib";
+
+import { toBytes32 } from "@/src/helpers/cover";
+import { formatAmount } from "@/utils/formatter";
+import { fromNow } from "@/utils/formatter/relative-time";
+
+import { useTokenSymbol } from "@/src/hooks/useTokenSymbol";
+import { useCalculateLiquidity } from "@/components/LiquidityForms/useCalculateLiquidity";
+import { useRemoveLiquidity } from "@/components/LiquidityForms/useRemoveLiquidity";
 import { useAppConstants } from "@/src/context/AppConstants";
 import { DataLoadingIndicator } from "@/components/DataLoadingIndicator";
+import { useLiquidityFormsContext } from "@/components/LiquidityForms/LiquidityFormsContext";
+import { TokenAmountWithPrefix } from "@/components/TokenAmountWithPrefix";
 
 export const WithdrawLiquidityModal = ({
   modalTitle,
   isOpen,
   onClose,
   info,
-  myStake,
   refetchInfo,
 }) => {
   const router = useRouter();
@@ -49,13 +53,15 @@ export const WithdrawLiquidityModal = ({
     });
   const liquidityTokenSymbol = useTokenSymbol(liquidityTokenAddress);
   const npmTokenSymbol = useTokenSymbol(NPMTokenAddress);
+  const { myStake, minStakeToAddLiquidity, isAccrualComplete } =
+    useLiquidityFormsContext();
   const {
-    balance,
+    podBalance: balance,
     allowance,
     approving,
     withdrawing,
     loadingAllowance,
-    loadingBalance,
+    loadingPodBalance: loadingBalance,
     handleApprove,
     handleWithdraw,
     vaultTokenSymbol,
@@ -67,6 +73,10 @@ export const WithdrawLiquidityModal = ({
     refetchInfo,
   });
 
+  const unStakableAmount = toBN(myStake)
+    .minus(minStakeToAddLiquidity)
+    .toString();
+
   // Clear on modal close
   useEffect(() => {
     if (isOpen) return;
@@ -76,14 +86,8 @@ export const WithdrawLiquidityModal = ({
   }, [isOpen]);
 
   useEffect(() => {
-    if (
-      npmValue &&
-      isGreater(
-        convertToUnits(npmValue),
-        myStake - convertToUnits(250).toString()
-      ) // prevent from entering more than the allowed max withdraw
-    ) {
-      setNpmErrorMsg("Exceeds maximum withdraw");
+    if (npmValue && isGreater(convertToUnits(npmValue), unStakableAmount)) {
+      setNpmErrorMsg("Cannot go below minimum stake");
     } else {
       setNpmErrorMsg("");
     }
@@ -95,11 +99,10 @@ export const WithdrawLiquidityModal = ({
     } else {
       setPodErrorMsg("");
     }
-  }, [balance, myStake, npmValue, podValue]);
+  }, [balance, npmValue, podValue, unStakableAmount]);
 
   const handleChooseNpmMax = () => {
-    // my stake - min stake
-    setNpmValue(convertFromUnits(myStake).toString() - 250);
+    setNpmValue(convertFromUnits(unStakableAmount).toString());
   };
 
   const handleChoosePodMax = () => {
@@ -155,13 +158,18 @@ export const WithdrawLiquidityModal = ({
             tokenAddress={NPMTokenAddress}
           >
             {isGreater(myStake, "0") && (
-              <>
-                Staked: {convertFromUnits(myStake).toString()} {npmTokenSymbol}
-              </>
+              <TokenAmountWithPrefix
+                amountInUnits={myStake}
+                prefix="Your Stake: "
+                symbol={npmTokenSymbol}
+              />
             )}
-            {npmErrorMsg && (
-              <p className="flex items-center text-FA5C2F">{npmErrorMsg}</p>
-            )}
+            <TokenAmountWithPrefix
+              amountInUnits={minStakeToAddLiquidity}
+              prefix="Minimum Stake: "
+              symbol={npmTokenSymbol}
+            />
+            {npmErrorMsg && <p className="text-FA5C2F">{npmErrorMsg}</p>}
           </TokenAmountInput>
         </div>
         <div className="mt-6">
@@ -175,9 +183,7 @@ export const WithdrawLiquidityModal = ({
             tokenBalance={balance}
             tokenAddress={vaultTokenAddress}
           />
-          {podErrorMsg && (
-            <p className="flex items-center text-FA5C2F">{podErrorMsg}</p>
-          )}
+          {podErrorMsg && <p className="text-FA5C2F">{podErrorMsg}</p>}
         </div>
         <div className="mt-6 modal-unlock">
           <ReceiveAmountInput
@@ -206,7 +212,10 @@ export const WithdrawLiquidityModal = ({
           </span>
         </div>
 
-        <div className="mt-8">
+        <div className="mt-4">
+          {!isAccrualComplete && (
+            <p className="text-FA5C2F">Wait for accrual</p>
+          )}
           <DataLoadingIndicator message={loadingMessage} />
           {!canWithdraw ? (
             <RegularButton
@@ -220,7 +229,8 @@ export const WithdrawLiquidityModal = ({
                 !npmValue ||
                 !podValue ||
                 loadingBalance ||
-                loadingAllowance
+                loadingAllowance ||
+                !isAccrualComplete
               }
             >
               {approving ? "Approving.." : "Approve"}
@@ -242,7 +252,8 @@ export const WithdrawLiquidityModal = ({
                 !npmValue ||
                 !podValue ||
                 loadingBalance ||
-                loadingAllowance
+                loadingAllowance ||
+                !isAccrualComplete
               }
             >
               {withdrawing ? "Withdrawing.." : "Withdraw"}
