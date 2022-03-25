@@ -13,6 +13,17 @@ export const CoverStatus = {
   4: "Claimable",
 };
 
+export const ReportStatus = {
+  Reporting: "Incident Happened",
+  Claimable: "Claimable",
+  FalseReporting: "False Reporting",
+};
+
+export const PoolTypes = {
+  TOKEN: "token",
+  POD: "pod",
+};
+
 // Will end with `/`
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
   ? new URL(process.env.NEXT_PUBLIC_API_URL).toString()
