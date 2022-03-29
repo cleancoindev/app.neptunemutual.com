@@ -9,6 +9,8 @@ import { convertFromUnits } from "@/utils/bn";
 import { useStakingPoolDeposit } from "@/src/hooks/useStakingPoolDeposit";
 import { explainInterval } from "@/utils/formatter/interval";
 import { formatCurrency } from "@/utils/formatter/currency";
+import { ModalWrapper } from "@/components/UI/molecules/modal/modal-wrapper";
+import { DataLoadingIndicator } from "@/components/DataLoadingIndicator";
 
 export const StakeModal = ({
   info,
@@ -25,11 +27,13 @@ export const StakeModal = ({
 
   const {
     balance,
+    loadingBalance,
     maxStakableAmount,
     isError,
     errorMsg,
     canDeposit,
     approving,
+    loadingAllowance,
     depositing,
     handleDeposit,
     handleApprove,
@@ -63,9 +67,16 @@ export const StakeModal = ({
     onClose();
   };
 
+  let loadingMessage = "";
+  if (loadingBalance) {
+    loadingMessage = "Fetching balance...";
+  } else if (loadingAllowance) {
+    loadingMessage = "Fetching allowance...";
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} disabled={approving || depositing}>
-      <div className="relative inline-block w-full max-w-xl p-12 overflow-y-auto text-left align-middle max-h-90vh bg-f1f3f6 rounded-3xl">
+      <ModalWrapper>
         <Dialog.Title className="flex items-center font-bold font-sora text-h2">
           {modalTitle}
         </Dialog.Title>
@@ -121,24 +132,27 @@ export const StakeModal = ({
           </p>
         </div>
 
-        {!canDeposit ? (
-          <RegularButton
-            disabled={isError || approving || !inputValue}
-            className="w-full p-6 mt-8 font-semibold uppercase text-h6"
-            onClick={handleApprove}
-          >
-            {approving ? "Approving..." : <>Approve {stakingTokenSymbol}</>}
-          </RegularButton>
-        ) : (
-          <RegularButton
-            disabled={isError || depositing}
-            className="w-full p-6 mt-8 font-semibold uppercase text-h6"
-            onClick={() => handleDeposit(onDepositSuccess)}
-          >
-            {depositing ? "Staking..." : "Stake"}
-          </RegularButton>
-        )}
-      </div>
+        <div className="mt-4">
+          <DataLoadingIndicator message={loadingMessage} />
+          {!canDeposit ? (
+            <RegularButton
+              disabled={isError || approving || !inputValue || loadingMessage}
+              className="w-full p-6 font-semibold uppercase text-h6"
+              onClick={handleApprove}
+            >
+              {approving ? "Approving..." : <>Approve {stakingTokenSymbol}</>}
+            </RegularButton>
+          ) : (
+            <RegularButton
+              disabled={isError || depositing || loadingMessage}
+              className="w-full p-6 font-semibold uppercase text-h6"
+              onClick={() => handleDeposit(onDepositSuccess)}
+            >
+              {depositing ? "Staking..." : "Stake"}
+            </RegularButton>
+          )}
+        </div>
+      </ModalWrapper>
     </Modal>
   );
 };
